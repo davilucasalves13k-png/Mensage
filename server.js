@@ -1,33 +1,25 @@
 const express = require('express');
-const { createServer } = require('http');
-const { WebSocketServer } = require('ws');
+const http = require('http');
+const { Server } = require('socket.io');
 const path = require('path');
 
 const app = express();
-const server = createServer(app);
-const wss = new WebSocketServer({ server });
+const server = http.createServer(app);
+const io = new Server(server);
 
-// Serve os arquivos da pasta atual (HTML)
+// Serve os arquivos HTML da pasta atual
 app.use(express.static(path.join(__dirname)));
 
-// Gerencia as conexões em tempo real
-wss.on('connection', (ws) => {
-    console.log('Novo usuário conectado!');
+io.on('connection', (socket) => {
+    console.log('Um usuário se conectou:', socket.id);
 
-    ws.on('message', (message) => {
-        // Converte a mensagem recebida para texto e repassa para todos os conectados
-        const messageString = message.toString();
-        console.log(`Mensagem recebida: ${messageString}`);
-
-        wss.clients.forEach((client) => {
-            if (client.readyState === ws.OPEN) {
-                client.send(messageString);
-            }
-        });
+    // Quando receber uma mensagem, manda para todo mundo (incluindo quem enviou)
+    socket.on('chat_message', (data) => {
+        io.emit('chat_message', data);
     });
 
-    ws.on('close', () => {
-        console.log('Usuário desconectado.');
+    socket.on('disconnect', () => {
+        console.log('Usuário desconectado:', socket.id);
     });
 });
 
