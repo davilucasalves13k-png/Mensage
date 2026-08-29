@@ -32,14 +32,12 @@ io.on('connection', (socket) => {
 
     socket.on('save_contact', ({ owner, contactPhone, contactName }) => {
         if (!userContacts[owner]) userContacts[owner] = [];
-        
         const existing = userContacts[owner].find(c => c.phone === contactPhone);
         if (existing) {
             existing.name = contactName;
         } else {
             userContacts[owner].push({ phone: contactPhone, name: contactName });
         }
-
         socket.emit('load_contacts', userContacts[owner]);
     });
 
@@ -52,24 +50,52 @@ io.on('connection', (socket) => {
         if (!messagesHistory[sender]) messagesHistory[sender] = [];
         messagesHistory[sender].push(messageData);
 
-        // Verifica se o destinatário já tem o remetente na lista dele. Se não tiver, adiciona automaticamente!
         if (!userContacts[receiver]) userContacts[receiver] = [];
         const hasContact = userContacts[receiver].find(c => c.phone === sender);
         if (!hasContact) {
             userContacts[receiver].push({ phone: sender, name: `Contato ${sender.slice(-4)}` });
-            // Atualiza a lista de contatos do destinatário em tempo real
             const receiverSocketId = users[receiver];
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit('load_contacts', userContacts[receiver]);
             }
         }
 
-        // Se o destinatário estiver online, envia a mensagem
         const receiverSocketId = users[receiver];
         if (receiverSocketId) {
             io.to(receiverSocketId).emit('receive_private_message', messageData);
         }
         socket.emit('receive_private_message', messageData);
+    });
+
+    // --- SISTEMA DE LIGAÇÃO DE VOZ (WebRTC Signaling) ---
+    socket.on('call_user', ({ caller, receiver, offer }) => {
+        const receiverSocketId = users[receiver];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit('incoming_call', { caller, offer });
+        } else {
+            socket.emit('call_rejected', { reason: 'offline' });
+        }
+    });
+
+    socket.on('answer_call', ({ caller, receiver, answer }) => {
+        const callerSocketId = users[caller];
+        if (callerSocketId) {
+            io.to(callerSocketId).emit('call_answered', { answer });
+        }
+    });
+
+    socket.on('ice_candidate', ({ to, candidate }) => {
+        const targetSocketId = users[to];
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('ice_candidate', { candidate });
+        }
+    });
+
+    socket.on('hangup_call', ({ to }) => {
+        const targetSocketId = users[to];
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('call_hangup');
+        }
     });
 
     socket.on('disconnect', () => {
