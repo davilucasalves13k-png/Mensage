@@ -11,19 +11,17 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-const users = {}; // numero -> socketId
-const messagesHistory = {}; // numero -> array de mensagens
-const userContacts = {}; // numero -> lista de contatos salvos
+const users = {}; 
+const messagesHistory = {}; 
+const userContacts = {}; 
 
 io.on('connection', (socket) => {
     console.log(`Conectado: ${socket.id}`);
 
-    // Registrar ou recuperar número
     socket.on('register_user', (phoneNumber) => {
         users[phoneNumber] = socket.id;
         console.log(`Usuário logado: ${phoneNumber}`);
 
-        // Envia histórico de mensagens e contatos salvos
         if (messagesHistory[phoneNumber]) {
             socket.emit('load_history', messagesHistory[phoneNumber]);
         }
@@ -32,11 +30,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Salvar/Adicionar contato na agenda do usuário
     socket.on('save_contact', ({ owner, contactPhone, contactName }) => {
         if (!userContacts[owner]) userContacts[owner] = [];
         
-        // Verifica se já existe, se não, adiciona
         const existing = userContacts[owner].find(c => c.phone === contactPhone);
         if (existing) {
             existing.name = contactName;
@@ -47,7 +43,6 @@ io.on('connection', (socket) => {
         socket.emit('load_contacts', userContacts[owner]);
     });
 
-    // Enviar mensagem privada
     socket.on('send_private_message', ({ sender, receiver, message, time }) => {
         const messageData = { sender, receiver, message, time };
 
@@ -57,6 +52,19 @@ io.on('connection', (socket) => {
         if (!messagesHistory[sender]) messagesHistory[sender] = [];
         messagesHistory[sender].push(messageData);
 
+        // Verifica se o destinatário já tem o remetente na lista dele. Se não tiver, adiciona automaticamente!
+        if (!userContacts[receiver]) userContacts[receiver] = [];
+        const hasContact = userContacts[receiver].find(c => c.phone === sender);
+        if (!hasContact) {
+            userContacts[receiver].push({ phone: sender, name: `Contato ${sender.slice(-4)}` });
+            // Atualiza a lista de contatos do destinatário em tempo real
+            const receiverSocketId = users[receiver];
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit('load_contacts', userContacts[receiver]);
+            }
+        }
+
+        // Se o destinatário estiver online, envia a mensagem
         const receiverSocketId = users[receiver];
         if (receiverSocketId) {
             io.to(receiverSocketId).emit('receive_private_message', messageData);
