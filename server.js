@@ -1,29 +1,35 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
+const cors = require('cors');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+app.use(cors());
 
-// Serve os arquivos HTML da pasta atual
-app.use(express.static(path.join(__dirname)));
+const server = http.createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: "*", 
+        methods: ["GET", "POST"]
+    }
+});
 
 io.on('connection', (socket) => {
-    console.log('Um usuário se conectou:', socket.id);
+    console.log(`Usuário conectado: ${socket.id}`);
 
-    // Quando receber uma mensagem, manda para todo mundo (incluindo quem enviou)
-    socket.on('chat_message', (data) => {
-        io.emit('chat_message', data);
+    socket.on('send_message', (data) => {
+        console.log('Mensagem recebida:', data);
+        io.emit('receive_message', data);
     });
 
     socket.on('disconnect', () => {
-        console.log('Usuário desconectado:', socket.id);
+        console.log(`Usuário desconectado: ${socket.id}`);
     });
 });
 
-const PORT = process.env.PORT || 3000;
+// Correção feita aqui: usa a porta do ambiente ou a 3001 como padrão
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
 });
